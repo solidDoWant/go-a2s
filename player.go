@@ -51,6 +51,9 @@ type TheShipPlayer struct {
 }
 
 func (c *Client) QueryPlayer() (*PlayerInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	/*
 		A2S_PLAYER
 

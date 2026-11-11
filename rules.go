@@ -28,6 +28,9 @@ type Rule struct {
 }
 
 func (c *Client) QueryRules() (*RulesInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	/*
 		A2S_RULES
 

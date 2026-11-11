@@ -16,6 +16,7 @@ type fakeServer struct {
 	mu        sync.Mutex
 	challenge uint32
 	delay     time.Duration
+	latency   time.Duration
 	before    []byte
 }
 
@@ -43,7 +44,7 @@ func (s *fakeServer) serve() {
 
 		s.mu.Lock()
 		reply := s.reply(buf[:n])
-		delay, before := s.delay, s.before
+		delay, before := s.delay+s.latency, s.before
 		s.delay, s.before = 0, nil
 		s.mu.Unlock()
 
@@ -166,4 +167,42 @@ func TestCollectMultiplePacketResponseSkipsStaleID(t *testing.T) {
 	payload, err := c.collectMultiplePacketResponse(splitPacket(7, 2, 0, []byte("stale")))
 	assert.Nil(t, err, "collectMultiplePacketResponse should skip fragments of a stale response")
 	assert.Equal(t, full, payload, "Payload should match the current response")
+}
+
+func TestConcurrentQueriesShareClient(t *testing.T) {
+	s := newFakeServer(t)
+
+	c, err := NewClient(s.conn.LocalAddr().String(), TimeoutOption(500*time.Millisecond))
+	assert.Nil(t, err, "NewClient should not return an error")
+	defer c.Close()
+
+	// keep replies in flight long enough for the other queries to start
+	s.mu.Lock()
+	s.latency = 20 * time.Millisecond
+	s.mu.Unlock()
+
+	const goroutines, rounds = 8, 10
+
+	var wg sync.WaitGroup
+	errs := make(chan error, goroutines*rounds)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			for j := 0; j < rounds; j++ {
+				_, err := c.QueryInfo()
+				errs <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		assert.Nil(t, err, "concurrent QueryInfo calls should all succeed")
+	}
 }

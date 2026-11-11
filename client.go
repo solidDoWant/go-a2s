@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,10 @@ var (
 )
 
 type Client struct {
+	// mu serializes queries. They share one socket and buffer, and each
+	// query drains the socket first, which would discard another query's
+	// reply.
+	mu            sync.Mutex
 	addr          string
 	shouldConnect bool
 	conn          net.Conn

@@ -98,6 +98,9 @@ type SourceTVInfo struct {
 }
 
 func (c *Client) QueryInfo() (*ServerInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	var builder PacketBuilder
 
 	/*
